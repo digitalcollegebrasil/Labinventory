@@ -1,0 +1,5 @@
+{
+  "name": "LabManager AI",
+  "description": "A comprehensive dashboard for managing school computer labs, tracking inventory, running checklists, and analyzing hardware issues using AI.",
+  "requestFramePermissions": []
+}
