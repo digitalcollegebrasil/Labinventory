@@ -32,10 +32,8 @@ import {
   Circle
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
-import { useLiveQuery } from 'dexie-react-hooks';
-
-import { Device, DeviceStatus, CheckRecord } from './types';
-import { db } from './db';
+import { Device, DeviceStatus, CheckRecord, Lab } from './types';
+import { api } from './services/api';
 import { StatCard } from './components/StatCard';
 import { Dashboard } from './components/Dashboard';
 import { AIModal } from './components/AIModal';
@@ -65,8 +63,25 @@ function AppContent() {
   // Actually, let's fix the type.
   const [chatUser, setChatUser] = useState<any>(null); // Using any to avoid import issues for now, or I should import User.
 
-  const devices = useLiveQuery(() => db.devices.toArray()) || [];
-  const labs = useLiveQuery(() => db.labs.toArray()) || [];
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [labs, setLabs] = useState<Lab[]>([]);
+
+  const fetchData = async () => {
+    try {
+      const [devicesData, labsData] = await Promise.all([
+        api.getDevices(),
+        api.getLabs()
+      ]);
+      setDevices(devicesData);
+      setLabs(labsData);
+    } catch (error) {
+      console.error("Failed to fetch data", error);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchData();
+  }, []);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [labFilter, setLabFilter] = useState<string>('All');
@@ -167,46 +182,55 @@ function AppContent() {
 
   const handleAddDevice = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!newDevice.id || !newDevice.lab || !newDevice.brand || !newDevice.model) {
       alert("Preencha os campos obrigatórios.");
       return;
     }
 
+    // Encontrar labId baseado no nome escolhido
+    const selectedLab = labs.find(l => l.name === newDevice.lab);
+    if (!selectedLab) {
+      alert("Laboratório inválido.");
+      return;
+    }
+
     try {
-      await db.devices.add({
+      await api.addComputador({
         id: newDevice.id,
-        name: `${newDevice.brand} ${newDevice.model}`,
         brand: newDevice.brand,
         model: newDevice.model,
         processor: newDevice.processor,
         ram: newDevice.ram,
         storage: newDevice.storage,
-        lab: newDevice.lab,
         status: newDevice.status,
-        specs: `${newDevice.processor}, ${newDevice.ram}, ${newDevice.storage}`,
-        lastCheck: new Date().toISOString().split('T')[0],
-        logs: [],
-        checkHistory: []
+        labId: selectedLab.id
       });
+
+      fetchData();
       setShowAddModal(false);
+
       setNewDevice({
-        id: '',
-        lab: '',
-        brand: '',
-        model: '',
-        processor: '',
-        ram: '',
-        storage: '',
+        id: "",
+        lab: "",
+        brand: "",
+        model: "",
+        processor: "",
+        ram: "",
+        storage: "",
         status: DeviceStatus.OPERATIONAL
       });
+
     } catch (error) {
-      alert("Erro ao adicionar dispositivo. Verifique se o Patrimônio já existe.");
+      console.error(error);
+      alert("Erro ao adicionar computador.");
     }
   };
 
   const handleDeleteDevice = async (id: string) => {
     if (confirm(`Tem certeza que deseja excluir o equipamento ${id}?`)) {
-      await db.devices.delete(id);
+      await api.deleteDevice(id);
+      fetchData();
     }
   };
 
@@ -216,7 +240,7 @@ function AppContent() {
     const checkRecord: CheckRecord = {
       date: new Date().toISOString().split('T')[0],
       time: new Date().toLocaleTimeString('pt-BR'),
-      userId: user?.id,
+      userId: user?.id?.toString(),
       userName: user?.name,
       ...checklistData
     };
@@ -226,11 +250,12 @@ function AppContent() {
 
     const newStatus = allOk ? DeviceStatus.OPERATIONAL : DeviceStatus.MAINTENANCE;
 
-    await db.devices.update(selectedDevice.id, {
+    await api.updateDevice(selectedDevice.id, {
       status: newStatus,
       lastCheck: checkRecord.date,
       checkHistory: [...(selectedDevice.checkHistory || []), checkRecord]
     });
+    fetchData();
 
     setShowChecklistModal(false);
     setChecklistData({
@@ -262,14 +287,17 @@ function AppContent() {
 
   const handleUpdateUserStatus = async (status: 'online' | 'busy' | 'offline') => {
     if (!user?.id) return;
-    await db.users.update(Number(user.id), { status });
-    // Force reload to update context or use a better state management in real app
+    await api.updateUser(Number(user.id), { status });
     window.location.reload();
   };
 
   const handleUpdateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user?.id) return;
+    console.log("handleUpdateAccount called", user);
+    if (!user?.id) {
+      alert("Erro: ID do usuário não encontrado. Tente fazer login novamente.");
+      return;
+    }
 
     const updates: any = {
       name: accountData.name,
@@ -277,14 +305,18 @@ function AppContent() {
     };
 
     if (accountData.newPassword) {
-      // In a real app, verify currentPassword first
       updates.password = accountData.newPassword;
     }
 
-    await db.users.update(Number(user.id), updates);
-    updateUser(updates);
-    alert('Perfil atualizado com sucesso!');
-    setShowAccountModal(false);
+    try {
+      await api.updateUser(Number(user.id), updates);
+      updateUser(updates);
+      alert('Perfil atualizado com sucesso!');
+      setShowAccountModal(false);
+    } catch (error: any) {
+      console.error("Failed to update account", error);
+      alert(`Erro ao atualizar perfil: ${error.message || 'Erro desconhecido'}`);
+    }
   };
 
   // CONDITIONAL RENDERING AFTER HOOKS
@@ -342,11 +374,8 @@ function AppContent() {
             onClick={() => setActiveTab('tasks')}
             className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium transition ${activeTab === 'tasks' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
           >
-            <CheckCircle className="w-5 h-5" />
             <span>Tarefas</span>
           </button>
-
-
 
           <button
             onClick={() => setActiveTab('settings')}
@@ -476,7 +505,7 @@ function AppContent() {
                   <RefreshCw className="w-4 h-4" />
                   <span>Atualizar</span>
                 </button>
-                <DataManagement devices={filteredDevices} />
+                <DataManagement devices={filteredDevices} labs={labs} onImportSuccess={fetchData} />
 
                 <button
                   onClick={() => setShowScanner(true)}
@@ -706,7 +735,10 @@ function AppContent() {
                                 <div className="relative group/status">
                                   <select
                                     value={device.status}
-                                    onChange={(e) => db.devices.update(device.id, { status: e.target.value as DeviceStatus })}
+                                    onChange={async (e) => {
+                                      await api.updateDevice(device.id, { status: e.target.value as DeviceStatus });
+                                      fetchData();
+                                    }}
                                     className={`appearance-none pl-3 pr-8 py-1 rounded-full text-xs font-medium cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500 ${getStatusColor(device.status)} bg-opacity-10 border-none`}
                                   >
                                     {Object.values(DeviceStatus).map(status => (

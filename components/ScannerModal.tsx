@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, Camera, Search } from 'lucide-react';
-import { useLiveQuery } from 'dexie-react-hooks';
 import { Html5Qrcode } from 'html5-qrcode';
-import { db } from '../db';
+import { api } from '../services/api';
+import { Device } from '../types';
 
 interface ScannerModalProps {
     onClose: () => void;
@@ -12,8 +12,12 @@ interface ScannerModalProps {
 export function ScannerModal({ onClose, onScan }: ScannerModalProps) {
     const [error, setError] = useState<string>('');
     const [manualId, setManualId] = useState('');
-    const devices = useLiveQuery(() => db.devices.toArray()) || [];
+    const [devices, setDevices] = useState<Device[]>([]);
     const scannerRef = useRef<Html5Qrcode | null>(null);
+
+    useEffect(() => {
+        api.getDevices().then(setDevices).catch(console.error);
+    }, []);
 
     useEffect(() => {
         const startScanner = async () => {

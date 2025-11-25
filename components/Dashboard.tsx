@@ -1,7 +1,6 @@
-import React, { useMemo } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db';
-import { DeviceStatus } from '../types';
+import React, { useMemo, useState, useEffect } from 'react';
+import { api } from '../services/api';
+import { Device, DeviceStatus } from '../types';
 import { StatCard } from './StatCard';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
 import { Monitor, AlertTriangle, CheckCircle, Clock, Layout, HardDrive, Cpu } from 'lucide-react';
@@ -9,7 +8,11 @@ import { Monitor, AlertTriangle, CheckCircle, Clock, Layout, HardDrive, Cpu } fr
 const COLORS = ['#10B981', '#F59E0B', '#EF4444', '#6B7280']; // Operational, Maint, Broken, Missing
 
 export function Dashboard() {
-    const devices = useLiveQuery(() => db.devices.toArray()) || [];
+    const [devices, setDevices] = useState<Device[]>([]);
+
+    useEffect(() => {
+        api.getDevices().then(setDevices).catch(console.error);
+    }, []);
 
     const stats = useMemo(() => {
         return {
@@ -82,35 +85,41 @@ export function Dashboard() {
                 {/* Status Chart */}
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
                     <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6">Status dos Equipamentos</h3>
-                    <div className="h-64">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie
-                                    data={statusData}
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={60}
-                                    outerRadius={80}
-                                    paddingAngle={5}
-                                    dataKey="value"
-                                >
-                                    {statusData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                    ))}
-                                </Pie>
-                                <Tooltip
-                                    contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff' }}
-                                />
-                                <Legend />
-                            </PieChart>
-                        </ResponsiveContainer>
+                    <div className="h-64 w-full">
+                        {statusData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={statusData}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={60}
+                                        outerRadius={80}
+                                        paddingAngle={5}
+                                        dataKey="value"
+                                    >
+                                        {statusData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip
+                                        contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff' }}
+                                    />
+                                    <Legend />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="flex items-center justify-center h-full text-gray-500">
+                                Carregando dados...
+                            </div>
+                        )}
                     </div>
                 </div>
 
                 {/* OS Distribution */}
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
                     <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6">Distribuição de Sistema Operacional</h3>
-                    <div className="h-64">
+                    <div className="h-64 w-full">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={osData} layout="vertical">
                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#374151" opacity={0.1} />

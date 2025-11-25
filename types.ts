@@ -1,3 +1,6 @@
+// =========================
+//  DEVICE STATUS (PORTUGUÊS)
+// =========================
 export enum DeviceStatus {
   OPERATIONAL = 'Operacional',
   MAINTENANCE = 'Manutenção',
@@ -5,27 +8,27 @@ export enum DeviceStatus {
   MISSING = 'Desaparecido'
 }
 
-// Deprecated: Use Lab interface from DB instead
-// Keeping for backward compatibility during migration if needed, 
-// but ideally we switch to string IDs or names from DB.
-export type LabName = string;
-
+// =========================
+//  SEDES
+// =========================
 export interface Sede {
   id?: number;
   name: string;
 }
 
-
-
-// Unit is deprecated/removed
-// export interface Unit { ... }
-
+// =========================
+//  LABORATÓRIOS
+//  (ligados à tabela sedes)
+// =========================
 export interface Lab {
   id?: number;
   name: string;
-  sedeId: number; // Linked directly to Sede
+  sedeId: number;
 }
 
+// =========================
+//  GRUPOS
+// =========================
 export interface Group {
   id?: number;
   name: string;
@@ -33,6 +36,11 @@ export interface Group {
   permissions?: string[];
 }
 
+// =========================
+//  LOGS DE MANUTENÇÃO
+//  (Frontend Only — não existe no Supabase
+//  mas é usado na UI)
+// =========================
 export interface MaintenanceLog {
   id: string;
   date: string;
@@ -40,6 +48,9 @@ export interface MaintenanceLog {
   reportedBy: string;
 }
 
+// =========================
+//  CHECKLIST
+// =========================
 export interface CheckRecord {
   date: string;
   time: string;
@@ -53,23 +64,47 @@ export interface CheckRecord {
   userName?: string;
 }
 
+// =========================
+//  DEVICE (Computadores)
+// =========================
+// IMPORTANTE:
+// A tabela `computadores` do Supabase não possui:
+// - name
+// - specs
+// - logs
+// - checkHistory
+//
+// MAS o frontend usa esses campos.
+// Portanto, eles são gerados pela API automaticamente
+// para manter compatibilidade.
 export interface Device {
-  id: string; // Patrimônio
-  name: string;
+  id: string;          // patrimônio
+  name: string;        // gerado pela API → `${brand} ${model}`
   brand: string;
   model: string;
   processor: string;
   ram: string;
   storage: string;
-  lab: string; // Now stores the Lab Name or ID
+
+  // IMPORTANTE:
+  // o banco usa labId (integer)
+  // o frontend usa lab (string com nome)
+  lab: string;
+
   status: DeviceStatus;
-  specs: string;
-  lastCheck: string;
-  checkHistory?: CheckRecord[];
+  specs: string;        // gerado → `${processor}, ${ram}, ${storage}`
+  lastCheck: string;    // vindo de created_at
+
+  // usados na UI
   logs: Log[];
+  checkHistory?: CheckRecord[];
+
   isStarred?: boolean;
 }
 
+// =========================
+//  LOG (UI Only)
+// =========================
 export interface Log {
   id: number;
   date: string;
@@ -79,30 +114,39 @@ export interface Log {
   userName?: string;
 }
 
+// =========================
+//  USER
+// =========================
 export interface User {
   id: number;
   name: string;
   email: string;
+  password?: string;
   avatar?: string;
-  role: 'admin' | 'user'; // Keeping for basic role check
-  groupId?: number;
+  role: 'admin' | 'user';
   isBlocked?: boolean;
   forceChangePassword?: boolean;
   status?: 'online' | 'busy' | 'offline';
 }
 
+// =========================
+//  TASK
+// =========================
 export interface Task {
   id?: number;
   title: string;
   description: string;
   status: 'pending' | 'in_progress' | 'done';
-  assignedTo?: string; // User ID
+  assignedTo?: string;
   assignedName?: string;
   createdAt: string;
   updatedAt: string;
   checklist?: { id: string; text: string; completed: boolean }[];
 }
 
+// =========================
+//  MESSAGE
+// =========================
 export interface Message {
   id?: number;
   senderId: string;
@@ -112,6 +156,9 @@ export interface Message {
   read: boolean;
 }
 
+// =========================
+//  DASHBOARD STATS
+// =========================
 export interface DashboardStats {
   total: number;
   operational: number;

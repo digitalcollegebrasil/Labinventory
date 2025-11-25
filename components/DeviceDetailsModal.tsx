@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { X, Calendar, User, AlertTriangle, Search, CheckCircle, Clock, Plus, Save } from 'lucide-react';
 import { Device, CheckRecord, Log } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { db } from '../db';
+import { api } from '../services/api';
 
 interface DeviceDetailsModalProps {
     device: Device;
@@ -49,7 +49,7 @@ export function DeviceDetailsModal({ device, onClose }: DeviceDetailsModalProps)
         };
 
         const updatedHistory = [...(device.checkHistory || []), record];
-        await db.devices.update(device.id, {
+        await api.updateDevice(device.id, {
             checkHistory: updatedHistory,
             lastCheck: record.date
         });
@@ -94,7 +94,7 @@ export function DeviceDetailsModal({ device, onClose }: DeviceDetailsModalProps)
 
         const updatedLogs = [...(device.logs || []), newLog];
 
-        await db.devices.update(device.id, {
+        await api.updateDevice(device.id, {
             logs: updatedLogs
         });
 
@@ -363,7 +363,7 @@ export function DeviceDetailsModal({ device, onClose }: DeviceDetailsModalProps)
                                                             <span className="font-medium text-gray-900 dark:text-white">{formatDate(record.date)}</span>
                                                             <span className="text-gray-400 text-sm">• {record.time}</span>
                                                         </div>
-                                                        {record.userId && record.userId !== user?.id && (
+                                                        {record.userId && record.userId !== user?.id.toString() && (
                                                             <div className="flex items-center gap-1 text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded-full">
                                                                 <AlertTriangle className="w-3 h-3" />
                                                                 Feito por: {record.userName || 'Outro usuário'}

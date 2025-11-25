@@ -1,6 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db';
+import React, { useState, useMemo, useEffect } from 'react';
+import { api } from '../services/api';
 import { Printer, Calendar, FileText, Download, Filter } from 'lucide-react';
 import { Device, CheckRecord } from '../types';
 
@@ -18,7 +17,11 @@ interface ReportItem {
 
 export function Reports() {
     const [period, setPeriod] = useState<Period>('month');
-    const devices = useLiveQuery(() => db.devices.toArray()) || [];
+    const [devices, setDevices] = useState<Device[]>([]);
+
+    useEffect(() => {
+        api.getDevices().then(setDevices).catch(console.error);
+    }, []);
 
     const getStartDate = (p: Period): Date => {
         const now = new Date();
@@ -123,8 +126,8 @@ export function Reports() {
                             key={p}
                             onClick={() => setPeriod(p)}
                             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${period === p
-                                    ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
-                                    : 'bg-gray-50 text-gray-600 dark:bg-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
+                                ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
+                                : 'bg-gray-50 text-gray-600 dark:bg-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
                                 }`}
                         >
                             {p === 'day' && 'Hoje'}

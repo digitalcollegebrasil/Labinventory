@@ -1,15 +1,37 @@
 import React, { useState, useEffect } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db';
-import { Task, User } from '../types';
+import { api } from '../services/api';
+import { Task, User, Sede, Lab, Device } from '../types';
 import { Plus, Trash2, CheckSquare, Square, User as UserIcon, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 
 export function TaskManagement() {
-    const tasks = useLiveQuery(() => db.tasks.toArray()) || [];
-    const users = useLiveQuery(() => db.users.toArray()) || [];
-    const sedes = useLiveQuery(() => db.sedes.toArray()) || [];
-    const labs = useLiveQuery(() => db.labs.toArray()) || [];
-    const devices = useLiveQuery(() => db.devices.toArray()) || [];
+    const [tasks, setTasks] = useState<Task[]>([]);
+    const [users, setUsers] = useState<User[]>([]);
+    const [sedes, setSedes] = useState<Sede[]>([]);
+    const [labs, setLabs] = useState<Lab[]>([]);
+    const [devices, setDevices] = useState<Device[]>([]);
+
+    const fetchData = async () => {
+        try {
+            const [tasksData, usersData, sedesData, labsData, devicesData] = await Promise.all([
+                api.getTasks(),
+                api.getUsers(),
+                api.getSedes(),
+                api.getLabs(),
+                api.getDevices()
+            ]);
+            setTasks(tasksData);
+            setUsers(usersData);
+            setSedes(sedesData);
+            setLabs(labsData);
+            setDevices(devicesData);
+        } catch (error) {
+            console.error("Failed to fetch data", error);
+        }
+    };
+
+    useEffect(() => {
+        fetchData();
+    }, []);
 
     const [showNewTaskForm, setShowNewTaskForm] = useState(false);
     const [newTaskTitle, setNewTaskTitle] = useState('');
@@ -36,7 +58,7 @@ export function TaskManagement() {
             }
         }
 
-        await db.tasks.add({
+        await api.createTask({
             title: newTaskTitle,
             description: descriptionSuffix.trim(),
             status: 'pending',
@@ -44,6 +66,7 @@ export function TaskManagement() {
             updatedAt: new Date().toISOString(),
             checklist: []
         });
+        fetchData();
 
         setNewTaskTitle('');
         setScopeType('none');
@@ -139,7 +162,7 @@ export function TaskManagement() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {tasks.map(task => (
-                    <TaskCard key={task.id} task={task} users={users} />
+                    <TaskCard key={task.id} task={task} users={users} onUpdate={fetchData} />
                 ))}
             </div>
 
@@ -153,7 +176,7 @@ export function TaskManagement() {
     );
 }
 
-function TaskCard({ task, users }: { task: Task, users: any[] }) {
+function TaskCard({ task, users, onUpdate }: { task: Task, users: any[], onUpdate: () => void }) {
     // Local state for immediate UI updates, debounced save to DB
     const [localTask, setLocalTask] = useState(task);
     const [newChecklistItem, setNewChecklistItem] = useState('');
@@ -165,17 +188,18 @@ function TaskCard({ task, users }: { task: Task, users: any[] }) {
 
     // Autosave effect
     useEffect(() => {
-        const timer = setTimeout(() => {
+        const timer = setTimeout(async () => {
             if (JSON.stringify(task) !== JSON.stringify(localTask)) {
-                db.tasks.update(task.id!, {
+                await api.updateTask(task.id!, {
                     ...localTask,
                     updatedAt: new Date().toISOString()
                 });
+                onUpdate();
             }
         }, 1000); // 1 second debounce
 
         return () => clearTimeout(timer);
-    }, [localTask, task]);
+    }, [localTask, task, onUpdate]);
 
     const updateField = (field: keyof Task, value: any) => {
         setLocalTask(prev => ({ ...prev, [field]: value }));
@@ -208,9 +232,10 @@ function TaskCard({ task, users }: { task: Task, users: any[] }) {
         updateField('checklist', updatedChecklist);
     };
 
-    const handleDeleteTask = () => {
+    const handleDeleteTask = async () => {
         if (confirm('Tem certeza que deseja excluir esta tarefa?')) {
-            db.tasks.delete(task.id!);
+            await api.deleteTask(task.id!);
+            onUpdate();
         }
     };
 

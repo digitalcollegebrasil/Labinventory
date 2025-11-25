@@ -1,11 +1,22 @@
-import React, { useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db';
-import { User, Trash2, Plus, Shield, ShieldAlert, Lock, Ban, CheckCircle, KeyRound } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { api } from '../services/api';
+import { User } from '../types';
+import { Trash2, Plus, Shield, ShieldAlert, Lock, Ban, CheckCircle, KeyRound } from 'lucide-react';
 
 export function UserManagement() {
-    const users = useLiveQuery(() => db.users.toArray()) || [];
-    const groups = useLiveQuery(() => db.groups.toArray()) || [];
+    const [users, setUsers] = useState<User[]>([]);
+    const fetchData = async () => {
+        try {
+            const usersData = await api.getUsers();
+            setUsers(usersData);
+        } catch (error) {
+            console.error("Failed to fetch users", error);
+        }
+    };
+
+    useEffect(() => {
+        fetchData();
+    }, []);
 
     const [isAdding, setIsAdding] = useState(false);
     const [newUser, setNewUser] = useState({
@@ -13,7 +24,6 @@ export function UserManagement() {
         email: '',
         password: '',
         role: 'user' as 'admin' | 'user',
-        groupId: '',
         forceChangePassword: true
     });
 
@@ -22,39 +32,45 @@ export function UserManagement() {
 
     const handleAddUser = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newUser.name || !newUser.email || !newUser.password) return;
+        if (!newUser.name || !newUser.email || !newUser.password) {
+            alert("Por favor, preencha todos os campos obrigatórios (Nome, Email, Senha).");
+            return;
+        }
 
         try {
-            await db.users.add({
+            await api.createUser({
                 name: newUser.name,
                 email: newUser.email,
                 password: newUser.password,
                 role: newUser.role,
-                groupId: newUser.groupId ? Number(newUser.groupId) : undefined,
                 forceChangePassword: newUser.forceChangePassword,
                 isBlocked: false,
                 avatar: `https://ui-avatars.com/api/?name=${newUser.name}&background=random`
             });
             setIsAdding(false);
-            setNewUser({ name: '', email: '', password: '', role: 'user', groupId: '', forceChangePassword: true });
-        } catch (error) {
-            alert('Erro ao criar usuário. O email pode já estar em uso.');
+            setNewUser({ name: '', email: '', password: '', role: 'user', forceChangePassword: true });
+            fetchData();
+        } catch (error: any) {
+            console.error("Error creating user:", error);
+            alert(`Erro ao criar usuário: ${error.message || 'O email pode já estar em uso.'}`);
         }
     };
 
     const handleDeleteUser = async (id: number) => {
         if (confirm('Tem certeza que deseja excluir este usuário?')) {
-            await db.users.delete(id);
+            await api.deleteUser(id);
+            fetchData();
         }
     };
 
     const toggleBlockUser = async (user: any) => {
-        await db.users.update(user.id, { isBlocked: !user.isBlocked });
+        await api.updateUser(user.id, { isBlocked: !user.isBlocked });
+        fetchData();
     };
 
     const handleResetPassword = async () => {
         if (resetPasswordId && newPassword) {
-            await db.users.update(resetPasswordId, {
+            await api.updateUser(resetPasswordId, {
                 password: newPassword,
                 forceChangePassword: true
             });
@@ -122,19 +138,7 @@ export function UserManagement() {
                                 <option value="admin">Administrador</option>
                             </select>
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Grupo</label>
-                            <select
-                                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                value={newUser.groupId}
-                                onChange={e => setNewUser({ ...newUser, groupId: e.target.value })}
-                            >
-                                <option value="">Sem Grupo</option>
-                                {groups.map(g => (
-                                    <option key={g.id} value={g.id}>{g.name}</option>
-                                ))}
-                            </select>
-                        </div>
+
                         <div className="flex items-center mt-6">
                             <label className="flex items-center space-x-2 cursor-pointer">
                                 <input
@@ -170,7 +174,7 @@ export function UserManagement() {
                     <thead>
                         <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
                             <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Usuário</th>
-                            <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Grupo</th>
+
                             <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Status</th>
                             <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider text-right">Ações</th>
                         </tr>
@@ -193,9 +197,7 @@ export function UserManagement() {
                                         </div>
                                     </div>
                                 </td>
-                                <td className="px-6 py-4 text-gray-600 dark:text-gray-300">
-                                    {user.groupId ? groups.find(g => g.id === user.groupId)?.name || '-' : '-'}
-                                </td>
+
                                 <td className="px-6 py-4">
                                     <div className="flex flex-col gap-1">
                                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium w-fit ${user.role === 'admin'

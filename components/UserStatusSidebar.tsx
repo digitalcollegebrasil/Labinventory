@@ -1,6 +1,5 @@
-import React from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db';
+import React, { useState, useEffect } from 'react';
+import { api } from '../services/api';
 import { Circle } from 'lucide-react';
 
 import { User } from '../types';
@@ -10,7 +9,23 @@ interface UserStatusSidebarProps {
 }
 
 export function UserStatusSidebar({ onUserClick }: UserStatusSidebarProps) {
-    const users = useLiveQuery(() => db.users.toArray()) || [];
+    const [users, setUsers] = useState<User[]>([]);
+
+    useEffect(() => {
+        const fetchUsers = async () => {
+            try {
+                const data = await api.getUsers();
+                setUsers(data);
+            } catch (error) {
+                console.error("Failed to fetch users", error);
+            }
+        };
+
+        fetchUsers();
+        // Optional: Poll for updates
+        const interval = setInterval(fetchUsers, 10000);
+        return () => clearInterval(interval);
+    }, []);
 
     const onlineUsers = users.filter(u => u.status === 'online' || !u.status); // Default to online if undefined
     const busyUsers = users.filter(u => u.status === 'busy');

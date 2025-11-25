@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db';
-import { User } from '../types';
+import { api } from '../services/api';
+import { User, Message } from '../types';
 import { X, Send, User as UserIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -15,21 +14,27 @@ export function ChatWindow({ targetUser, onClose }: ChatWindowProps) {
     const [newMessage, setNewMessage] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    // Query messages where (sender is current AND receiver is target) OR (sender is target AND receiver is current)
-    const messages = useLiveQuery(async () => {
-        if (!currentUser?.id || !targetUser.id) return [];
+    const [messages, setMessages] = useState<Message[]>([]);
 
-        const sent = await db.messages
-            .where({ senderId: currentUser.id.toString(), receiverId: targetUser.id.toString() })
-            .toArray();
+    const fetchMessages = async () => {
+        if (!currentUser?.id || !targetUser.id) return;
+        try {
+            const allMessages = await api.getMessages();
+            const filtered = allMessages.filter(m =>
+                (m.senderId === currentUser.id.toString() && m.receiverId === targetUser.id.toString()) ||
+                (m.senderId === targetUser.id.toString() && m.receiverId === currentUser.id.toString())
+            );
+            const sorted = filtered.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+            setMessages(sorted);
+        } catch (error) {
+            console.error("Failed to fetch messages", error);
+        }
+    };
 
-        const received = await db.messages
-            .where({ senderId: targetUser.id.toString(), receiverId: currentUser.id.toString() })
-            .toArray();
-
-        return [...sent, ...received].sort((a, b) =>
-            new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-        );
+    useEffect(() => {
+        fetchMessages();
+        const interval = setInterval(fetchMessages, 3000); // Poll every 3 seconds
+        return () => clearInterval(interval);
     }, [currentUser?.id, targetUser.id]);
 
     const scrollToBottom = () => {
@@ -44,13 +49,14 @@ export function ChatWindow({ targetUser, onClose }: ChatWindowProps) {
         e.preventDefault();
         if (!newMessage.trim() || !currentUser?.id) return;
 
-        await db.messages.add({
+        await api.createMessage({
             senderId: currentUser.id.toString(),
             receiverId: targetUser.id.toString(),
             content: newMessage,
             timestamp: new Date().toISOString(),
             read: false
         });
+        fetchMessages();
 
         setNewMessage('');
     };
@@ -71,8 +77,8 @@ export function ChatWindow({ targetUser, onClose }: ChatWindowProps) {
                             )}
                         </div>
                         <div className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-indigo-600 ${targetUser.status === 'busy' ? 'bg-red-400' :
-                                targetUser.status === 'offline' ? 'bg-gray-400' :
-                                    'bg-green-400'
+                            targetUser.status === 'offline' ? 'bg-gray-400' :
+                                'bg-green-400'
                             }`}></div>
                     </div>
                     <div>
@@ -95,8 +101,8 @@ export function ChatWindow({ targetUser, onClose }: ChatWindowProps) {
                     return (
                         <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                             <div className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm shadow-sm ${isMe
-                                    ? 'bg-indigo-600 text-white rounded-br-none'
-                                    : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-bl-none border border-gray-100 dark:border-gray-600'
+                                ? 'bg-indigo-600 text-white rounded-br-none'
+                                : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-bl-none border border-gray-100 dark:border-gray-600'
                                 }`}>
                                 <p>{msg.content}</p>
                                 <p className={`text-[10px] mt-1 text-right ${isMe ? 'text-indigo-200' : 'text-gray-400'}`}>

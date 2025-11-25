@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db';
+import React, { useState, useEffect } from 'react';
+import { api } from '../services/api';
 import { Plus, Trash2, Edit2, Shield, Users, User, Save, X, UserPlus, CheckSquare, Square } from 'lucide-react';
 import { Group, User as UserType } from '../types';
 
@@ -22,7 +21,21 @@ interface GroupDetailsModalProps {
 
 function GroupDetailsModal({ group, onClose }: GroupDetailsModalProps) {
     const [activeTab, setActiveTab] = useState<'members' | 'permissions'>('members');
-    const users = useLiveQuery(() => db.users.toArray()) || [];
+    const [users, setUsers] = useState<UserType[]>([]);
+
+    const fetchUsers = async () => {
+        try {
+            const usersData = await api.getUsers();
+            setUsers(usersData);
+        } catch (error) {
+            console.error("Failed to fetch users", error);
+        }
+    };
+
+    useEffect(() => {
+        fetchUsers();
+    }, []);
+
     const groupUsers = users.filter(u => u.groupId === group.id);
 
     // Permissions State
@@ -34,7 +47,7 @@ function GroupDetailsModal({ group, onClose }: GroupDetailsModalProps) {
 
     const handleSavePermissions = async () => {
         if (group.id) {
-            await db.groups.update(group.id, { permissions });
+            await api.updateGroup(group.id, { permissions });
             alert('Permissões salvas com sucesso!');
         }
     };
@@ -48,15 +61,38 @@ function GroupDetailsModal({ group, onClose }: GroupDetailsModalProps) {
     };
 
     const handleAddMember = async () => {
-        if (!selectedUserId || !group.id) return;
-        await db.users.update(Number(selectedUserId), { groupId: group.id });
-        setIsAddingMember(false);
-        setSelectedUserId('');
+        if (!selectedUserId) {
+            alert("Por favor, selecione um usuário.");
+            return;
+        }
+        if (!group.id) {
+            alert("Erro: ID do grupo não encontrado.");
+            return;
+        }
+
+        try {
+            console.log(`Adding user ${selectedUserId} to group ${group.id}`);
+            await api.updateUser(Number(selectedUserId), { groupId: group.id });
+            await fetchUsers(); // Wait for fetch to complete
+            setIsAddingMember(false);
+            setSelectedUserId('');
+            alert("Usuário adicionado com sucesso!");
+        } catch (error) {
+            console.error("Failed to add member:", error);
+            alert("Erro ao adicionar membro ao grupo. Verifique o console para mais detalhes.");
+        }
     };
 
     const handleRemoveMember = async (userId: number) => {
         if (confirm('Remover usuário deste grupo?')) {
-            await db.users.update(userId, { groupId: undefined });
+            try {
+                await api.updateUser(userId, { groupId: null as any });
+                await fetchUsers();
+                alert("Usuário removido do grupo.");
+            } catch (error) {
+                console.error("Failed to remove member:", error);
+                alert("Erro ao remover usuário do grupo.");
+            }
         }
     };
 
@@ -197,8 +233,25 @@ function GroupDetailsModal({ group, onClose }: GroupDetailsModalProps) {
 }
 
 export function GroupManagement() {
-    const groups = useLiveQuery(() => db.groups.toArray()) || [];
-    const users = useLiveQuery(() => db.users.toArray()) || [];
+    const [groups, setGroups] = useState<Group[]>([]);
+    const [users, setUsers] = useState<UserType[]>([]);
+
+    const fetchData = async () => {
+        try {
+            const [groupsData, usersData] = await Promise.all([
+                api.getGroups(),
+                api.getUsers()
+            ]);
+            setGroups(groupsData);
+            setUsers(usersData);
+        } catch (error) {
+            console.error("Failed to fetch data", error);
+        }
+    };
+
+    useEffect(() => {
+        fetchData();
+    }, []);
 
     // Form State
     const [newGroupName, setNewGroupName] = useState('');
@@ -212,24 +265,36 @@ export function GroupManagement() {
 
     const handleAddGroup = async () => {
         if (!newGroupName) return;
-        await db.groups.add({ name: newGroupName, description: newGroupDesc, permissions: [] });
+        await api.createGroup({ name: newGroupName, description: newGroupDesc, permissions: [] });
         setNewGroupName('');
         setNewGroupDesc('');
+        fetchData();
     };
 
     const handleUpdateGroup = async () => {
         if (!editingGroup || !editingGroup.id) return;
-        await db.groups.update(editingGroup.id, {
+        await api.updateGroup(editingGroup.id, {
             name: editingGroup.name,
             description: editingGroup.description
         });
         setEditingGroup(null);
+        fetchData();
     };
 
     const handleDeleteGroup = async (id: number) => {
         if (confirm('Tem certeza? Usuários neste grupo perderão a associação.')) {
-            await db.users.where('groupId').equals(id).modify({ groupId: undefined });
-            await db.groups.delete(id);
+            // We need to update users first.
+            // But we can't do a bulk update via API easily unless we add an endpoint.
+            // Or we iterate.
+            // Or we let the database handle it (foreign key set null? SQLite supports it if configured).
+            // But we didn't configure foreign keys in migrate.js explicitly with onDelete('SET NULL').
+            // So we should do it manually.
+            // Find users in group
+            const usersInGroup = users.filter(u => u.groupId === id);
+            await Promise.all(usersInGroup.map(u => api.updateUser(u.id, { groupId: null as any })));
+
+            await api.deleteGroup(id);
+            fetchData();
         }
     };
 

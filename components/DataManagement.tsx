@@ -1,15 +1,16 @@
 import React, { useState, useRef } from 'react';
 import { Download, Upload, FileSpreadsheet, FileText, ChevronDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { db } from '../db';
-import { Device, DeviceStatus } from '../types';
+import { api } from '../services/api';
+import { Device, DeviceStatus, Lab } from '../types';
 
 interface DataManagementProps {
     devices: Device[];
+    labs: Lab[];
     onImportSuccess?: () => void;
 }
 
-export function DataManagement({ devices, onImportSuccess }: DataManagementProps) {
+export function DataManagement({ devices, labs, onImportSuccess }: DataManagementProps) {
     const [isOpen, setIsOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -116,7 +117,16 @@ export function DataManagement({ devices, onImportSuccess }: DataManagementProps
                         continue;
                     }
 
-                    const device: Device = {
+                    // Find labId
+                    const selectedLab = labs.find(l => l.name.toLowerCase() === String(lab).toLowerCase());
+
+                    if (!selectedLab) {
+                        console.warn("Skipping row due to invalid Lab:", lab);
+                        errorCount++;
+                        continue;
+                    }
+
+                    const deviceData = {
                         id: String(id),
                         lab: String(lab),
                         brand: normalizedRow['marca'] || normalizedRow['brand'] || '',
@@ -125,18 +135,26 @@ export function DataManagement({ devices, onImportSuccess }: DataManagementProps
                         ram: normalizedRow['ram'] || normalizedRow['memory'] || '',
                         storage: normalizedRow['armazenamento'] || normalizedRow['storage'] || normalizedRow['hd'] || normalizedRow['ssd'] || '',
                         status: (Object.values(DeviceStatus).includes(normalizedRow['status']) ? normalizedRow['status'] : DeviceStatus.OPERATIONAL) as DeviceStatus,
-                        lastCheck: normalizedRow['última verificação'] || normalizedRow['ultima verificacao'] || new Date().toISOString().split('T')[0],
-                        name: `${normalizedRow['marca'] || ''} ${normalizedRow['modelo'] || ''}`.trim() || 'Desconhecido',
-                        specs: `${normalizedRow['processador'] || ''}, ${normalizedRow['ram'] || ''}, ${normalizedRow['armazenamento'] || ''}`,
-                        logs: [],
-                        checkHistory: []
+                        labId: selectedLab.id
                     };
 
                     try {
-                        await db.devices.put(device);
-                        importedCount++;
+                        // Try to create
+                        try {
+                            await api.addComputador(deviceData);
+                            importedCount++;
+                        } catch (createError) {
+                            // If create failed, maybe it exists. Try update.
+                            try {
+                                await api.updateDevice(deviceData.id, deviceData);
+                                importedCount++;
+                            } catch (updateError) {
+                                console.error("Error importing device (create & update failed):", deviceData, createError, updateError);
+                                errorCount++;
+                            }
+                        }
                     } catch (err) {
-                        console.error("Error importing device:", device, err);
+                        console.error("Error importing device:", deviceData, err);
                         errorCount++;
                     }
                 }

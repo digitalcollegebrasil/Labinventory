@@ -1,13 +1,39 @@
-import React, { useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db';
+import React, { useState, useEffect } from 'react';
+import { api } from '../services/api';
 import { Plus, Trash2, Edit2, ChevronRight, Building, MapPin, Monitor, Save, X, Laptop, AlertTriangle } from 'lucide-react';
-import { Lab, DeviceStatus, Sede } from '../types';
+import { Lab, DeviceStatus, Sede, Device } from '../types';
 
 export function StructureManagement() {
-    const sedes = useLiveQuery(() => db.sedes.toArray()) || [];
-    const labs = useLiveQuery(() => db.labs.toArray()) || [];
-    const devices = useLiveQuery(() => db.devices.toArray()) || [];
+    const [sedes, setSedes] = useState<Sede[]>([]);
+    const [labs, setLabs] = useState<Lab[]>([]);
+    const [devices, setDevices] = useState<Device[]>([]);
+
+    const fetchData = async () => {
+        try {
+            const sedesData = await api.getSedes();
+            setSedes(sedesData);
+        } catch (error) {
+            console.error("Failed to fetch sedes", error);
+        }
+
+        try {
+            const labsData = await api.getLabs();
+            setLabs(labsData);
+        } catch (error) {
+            console.error("Failed to fetch labs", error);
+        }
+
+        try {
+            const devicesData = await api.getDevices();
+            setDevices(devicesData);
+        } catch (error) {
+            console.error("Failed to fetch devices", error);
+        }
+    };
+
+    useEffect(() => {
+        fetchData();
+    }, []);
 
     const [activeTab, setActiveTab] = useState<'sedes' | 'labs'>('sedes');
 
@@ -36,51 +62,55 @@ export function StructureManagement() {
         if (!newName) return;
 
         if (activeTab === 'sedes') {
-            await db.sedes.add({ name: newName });
+            await api.createSede({ name: newName });
             setNewName('');
+            fetchData();
         } else if (activeTab === 'labs') {
             if (!selectedSedeId) {
                 alert('Selecione uma sede para o laboratório.');
                 return;
             }
             // Uniqueness Check
-            const exists = await db.labs
-                .where({ name: newName, sedeId: Number(selectedSedeId) })
-                .first();
+            // We can check locally or rely on server error
+            const exists = labs.find(l => l.name === newName && l.sedeId === Number(selectedSedeId));
 
             if (exists) {
                 alert('Já existe um laboratório com este nome nesta sede.');
                 return;
             }
 
-            await db.labs.add({ name: newName, sedeId: Number(selectedSedeId) });
+            await api.createLab({ name: newName, sedeId: Number(selectedSedeId) });
             setNewName('');
+            fetchData();
         }
     };
 
     const handleUpdateLab = async () => {
         if (!editingLab || !editingLab.id) return;
-        await db.labs.update(editingLab.id, {
+        await api.updateLab(editingLab.id, {
             name: editingLab.name,
             sedeId: Number(editingLab.sedeId)
         });
+        fetchData();
         setEditingLab(null);
     };
 
     const handleUpdateSede = async () => {
         if (!editingSede || !editingSede.id) return;
-        await db.sedes.update(editingSede.id, { name: editingSede.name });
+        await api.updateSede(editingSede.id, { name: editingSede.name });
+        fetchData();
         setEditingSede(null);
     };
 
     const handleDelete = async (id: number, type: 'sedes' | 'labs') => {
         if (confirm('Tem certeza? Isso pode afetar itens dependentes.')) {
-            if (type === 'sedes') await db.sedes.delete(id);
-            if (type === 'labs') await db.labs.delete(id);
+            if (type === 'sedes') await api.deleteSede(id);
+            if (type === 'labs') await api.deleteLab(id);
+            fetchData();
         }
     };
 
-    const handleAddDevice = async (labName: string) => {
+    const handleAddDevice = async (lab: Lab) => {
         if (!newDevice.id || !newDevice.brand || !newDevice.model) {
             alert("Preencha os campos obrigatórios.");
             return;
@@ -88,39 +118,38 @@ export function StructureManagement() {
 
         try {
             // Check if updating or adding
-            const existing = await db.devices.get(newDevice.id);
+            const existing = devices.find(d => d.id === newDevice.id);
 
             if (existing) {
                 // Update
-                await db.devices.update(newDevice.id, {
+                // Note: If updating lab, we should pass labId if the backend supports it.
+                // For now, keeping existing behavior but passing labId if possible or just ignoring if updateDevice doesn't handle it yet.
+                await api.updateDevice(newDevice.id, {
                     name: `${newDevice.brand} ${newDevice.model}`,
                     brand: newDevice.brand,
                     model: newDevice.model,
                     processor: newDevice.processor,
                     ram: newDevice.ram,
                     storage: newDevice.storage,
-                    lab: labName,
+                    // lab: lab.name, // potentially deprecated in favor of labId
                     status: newDevice.status,
                     specs: `${newDevice.processor}, ${newDevice.ram}, ${newDevice.storage}`,
                 });
             } else {
                 // Add
-                await db.devices.add({
+                await api.addComputador({
                     id: newDevice.id,
-                    name: `${newDevice.brand} ${newDevice.model}`,
                     brand: newDevice.brand,
                     model: newDevice.model,
                     processor: newDevice.processor,
                     ram: newDevice.ram,
                     storage: newDevice.storage,
-                    lab: labName, // Using Lab Name for now as per Device interface
                     status: newDevice.status,
-                    specs: `${newDevice.processor}, ${newDevice.ram}, ${newDevice.storage}`,
-                    lastCheck: new Date().toISOString().split('T')[0],
-                    logs: [],
-                    checkHistory: []
+                    labId: lab.id
                 });
             }
+
+            fetchData();
 
             setIsAddingDevice(false);
             setNewDevice({
@@ -133,6 +162,7 @@ export function StructureManagement() {
                 status: DeviceStatus.OPERATIONAL
             });
         } catch (error) {
+            console.error(error);
             alert("Erro ao salvar dispositivo.");
         }
     };
@@ -384,7 +414,7 @@ export function StructureManagement() {
                                                             Cancelar
                                                         </button>
                                                         <button
-                                                            onClick={() => handleAddDevice(item.name)}
+                                                            onClick={() => handleAddDevice(item)}
                                                             className="px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700"
                                                         >
                                                             Salvar
@@ -433,7 +463,8 @@ export function StructureManagement() {
                                                                 <button
                                                                     onClick={async () => {
                                                                         if (confirm('Tem certeza que deseja excluir este dispositivo?')) {
-                                                                            await db.devices.delete(device.id);
+                                                                            await api.deleteDevice(device.id);
+                                                                            fetchData();
                                                                         }
                                                                     }}
                                                                     className="text-red-500 hover:text-red-700"
