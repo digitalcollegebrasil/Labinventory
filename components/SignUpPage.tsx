@@ -15,7 +15,7 @@ export function SignUpPage({ onNavigateToLogin }: SignUpPageProps) {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!name || !email || !password) return;
-        await register(name, email);
+        await register(name, email, password);
     };
 
     return (

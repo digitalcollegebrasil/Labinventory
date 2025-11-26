@@ -90,6 +90,7 @@ export interface Device {
   // o banco usa labId (integer)
   // o frontend usa lab (string com nome)
   lab: string;
+  labId?: number; // Added to match API return
 
   status: DeviceStatus;
   specs: string;        // gerado → `${processor}, ${ram}, ${storage}`
@@ -118,7 +119,7 @@ export interface Log {
 //  USER
 // =========================
 export interface User {
-  id: number;
+  id: number | string;
   name: string;
   email: string;
   password?: string;

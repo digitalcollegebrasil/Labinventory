@@ -8,13 +8,17 @@ interface UserStatusSidebarProps {
     onUserClick?: (user: User) => void;
 }
 
+import { useAuth } from '../contexts/AuthContext';
+
 export function UserStatusSidebar({ onUserClick }: UserStatusSidebarProps) {
+    const { user: currentUser } = useAuth();
     const [users, setUsers] = useState<User[]>([]);
 
     useEffect(() => {
         const fetchUsers = async () => {
             try {
                 const data = await api.getUsers();
+                console.log("Fetched users:", data); // Debug log
                 setUsers(data);
             } catch (error) {
                 console.error("Failed to fetch users", error);
@@ -27,9 +31,12 @@ export function UserStatusSidebar({ onUserClick }: UserStatusSidebarProps) {
         return () => clearInterval(interval);
     }, []);
 
-    const onlineUsers = users.filter(u => u.status === 'online' || !u.status); // Default to online if undefined
-    const busyUsers = users.filter(u => u.status === 'busy');
-    const offlineUsers = users.filter(u => u.status === 'offline');
+    const filteredUsers = users.filter(u => u.id !== currentUser?.id);
+
+    const onlineUsers = filteredUsers.filter(u => u.status === 'online' || !u.status); // Default to online if undefined
+    const busyUsers = filteredUsers.filter(u => u.status === 'busy');
+    const offlineUsers = filteredUsers.filter(u => u.status === 'offline');
+    const otherUsers = filteredUsers.filter(u => !['online', 'busy', 'offline'].includes(u.status || 'online'));
 
     const UserItem = ({ user }: { user: User }) => (
         <button
@@ -96,6 +103,19 @@ export function UserStatusSidebar({ onUserClick }: UserStatusSidebarProps) {
                             </p>
                             <div className="space-y-1">
                                 {offlineUsers.map(user => <UserItem key={user.id} user={user as User} />)}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Others */}
+                    {otherUsers.length > 0 && (
+                        <div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 flex items-center justify-between">
+                                <span>Outros</span>
+                                <span className="bg-gray-100 text-gray-800 text-[10px] px-1.5 py-0.5 rounded-full dark:bg-gray-700 dark:text-gray-300">{otherUsers.length}</span>
+                            </p>
+                            <div className="space-y-1">
+                                {otherUsers.map(user => <UserItem key={user.id} user={user as User} />)}
                             </div>
                         </div>
                     )}

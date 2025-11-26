@@ -87,12 +87,20 @@ export function StructureManagement() {
 
     const handleUpdateLab = async () => {
         if (!editingLab || !editingLab.id) return;
-        await api.updateLab(editingLab.id, {
-            name: editingLab.name,
-            sedeId: Number(editingLab.sedeId)
-        });
-        fetchData();
-        setEditingLab(null);
+        try {
+            const payload = {
+                name: editingLab.name,
+                sedeId: Number(editingLab.sedeId)
+            };
+            console.log("Updating lab with payload:", payload);
+
+            await api.updateLab(editingLab.id, payload);
+            fetchData();
+            setEditingLab(null);
+        } catch (error: any) {
+            console.error("Failed to update lab", error);
+            alert(`Erro ao atualizar laboratório: ${error.message || JSON.stringify(error)}`);
+        }
     };
 
     const handleUpdateSede = async () => {
@@ -304,6 +312,7 @@ export function StructureManagement() {
                                                         onChange={(e) => setEditingLab({ ...editingLab, sedeId: Number(e.target.value) })}
                                                         className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                                                     >
+                                                        <option value="">Selecione...</option>
                                                         {sedes.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                                     </select>
                                                 </div>

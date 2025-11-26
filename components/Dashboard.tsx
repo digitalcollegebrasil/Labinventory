@@ -85,7 +85,7 @@ export function Dashboard() {
                 {/* Status Chart */}
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
                     <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6">Status dos Equipamentos</h3>
-                    <div className="h-64 w-full">
+                    <div className="h-64 w-full" style={{ minHeight: '250px' }}>
                         {statusData.length > 0 ? (
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
